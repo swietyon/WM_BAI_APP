@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bkg"
-    tools:context=".LoginActivity">
+    tools:context=".SignUpActivity">
 
     <ImageView
         android:id="@+id/imageView"
@@ -23,7 +23,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:fontFamily="sans-serif-medium"
-        android:text="PRIVATE YOUR DATA"
+        android:text="REGISTRATE ACCOUNT"
         android:textColor="@color/cardview_light_background"
         android:textSize="22dp"
         android:textStyle="bold"
@@ -47,7 +47,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Now you can hide your private data in application. Log in to try"
+            android:text="Now you can registrate into your app."
             android:textColor="@color/white"
             android:textAlignment="center"
             android:padding="30dp"
@@ -91,40 +91,7 @@
             android:padding="12dp" />
 
         <!-- Checkbox i tekst obok -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginStart="16dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginEnd="16dp">
 
-            <CheckBox
-                android:id="@+id/checkBoxRememberMe"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:buttonTint="@color/black"/> <!-- Kolor checkboxa -->
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Remember Me"
-                android:textColor="@color/black"
-                android:layout_gravity="center_vertical"
-                android:layout_marginStart="8dp"/>
-        </LinearLayout>
-
-        <Button
-                android:id="@+id/loginButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_marginTop="16dp"
-                android:layout_marginEnd="16dp"
-                android:background="@color/black"
-                android:padding="12dp"
-                android:text="Login"
-                android:textColor="@android:color/white"/>
         <Button
                 android:id="@+id/signUpButton"
                 android:layout_width="match_parent"
@@ -135,6 +102,19 @@
                 android:background="#222222"
                 android:padding="12dp"
                 android:text="Registrate"
+                android:textColor="@color/white"/>
+
+
+        <Button
+                android:id="@+id/loginButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginEnd="16dp"
+                android:background="#222222"
+                android:padding="12dp"
+                android:text="To login"
                 android:textColor="@color/white"/>
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

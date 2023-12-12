@@ -1,60 +1,67 @@
 package com.example.bamproj
 
-import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Bundle
-import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.example.bamproj.services.SharedPreferencesManager
 import com.example.bamproj.services.UserService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import kotlin.math.log
+import kotlinx.coroutines.withContext
 
-class LoginActivity : AppCompatActivity() {
+class SignUpActivity : AppCompatActivity() {
 
     private lateinit var editTextEmail: EditText
     private lateinit var editTextPassword: EditText
     private lateinit var loginButton: Button
     private lateinit var signUpButton: Button
     private lateinit var userService: UserService
-    private lateinit var rememberMeCheckbox: CheckBox
-    private lateinit var sharedPreferences: SharedPreferences
-    private lateinit var editor: SharedPreferences.Editor
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_login)
+        setContentView(R.layout.activity_signup)
+
 
         editTextEmail = findViewById(R.id.editTextEmail)
         editTextPassword = findViewById(R.id.editTextPassword)
         loginButton = findViewById(R.id.loginButton)
         signUpButton = findViewById(R.id.signUpButton)
-        rememberMeCheckbox = findViewById(R.id.checkBoxRememberMe)
+
         userService = UserService((applicationContext as BamApplication).database.userDao()) // Inicjalizacja serwisu
-        sharedPreferences = getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
-        editor = sharedPreferences.edit()
 
         loginButton.setOnClickListener {
-            performLogin()
+            goToLoginActivity()
         }
-
         signUpButton.setOnClickListener {
-            changeToSignUpActivity()
-        }
+            lifecycleScope.launch {
+                val email = editTextEmail.text.toString()
+                val password = editTextPassword.text.toString()
 
-        val rememberedLogin = sharedPreferences.getString("LOGIN", null);
-        if (rememberedLogin != null) {
-            showToast("Zalogowano bez logowania!")
+                if (email.isNotEmpty() && password.isNotEmpty()) {
+                    lifecycleScope.launch {
+                        if (userService.isUserNameExists(email)) {
+                            showToast("Użytkownik o podanej nazwie już istnieje")
+                        } else {
+                            val success = userService.registerUser(email, password, "", "")
+                            if (success) {
+                                showToast("Użytkownik został zarejestrowany")
+                                goToLoginActivity()
+                            } else {
+                                showToast("Wystąpił problem podczas rejestracji użytkownika")
+                            }
+                        }
+                    }
+                } else {
+                    showToast("Wypełnij oba pola: email i hasło")
+                }
+            }
         }
 
         editTextEmail.setOnKeyListener { _, keyCode, event ->
@@ -75,8 +82,8 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun changeToSignUpActivity() {
-        val intent = Intent(this, SignUpActivity::class.java)
+    private fun goToLoginActivity() {
+        val intent = Intent(this, LoginActivity::class.java)
         startActivity(intent)
     }
 
@@ -85,22 +92,10 @@ class LoginActivity : AppCompatActivity() {
         val password = editTextPassword.text.toString()
 
         if (email.isNotEmpty() && password.isNotEmpty()) {
-            lifecycleScope.launch {
-                val isValid: Boolean = userService.validatePassword(email, password)
-                if (isValid) {
-                    showToast(rememberMeCheckbox.isChecked.toString())
-                    if (rememberMeCheckbox.isChecked) {
-                        editor.putString("LOGIN", email)
-                        editor.putString("PASSWORD", password)
-                        editor.apply()
-                    }
-                    showToast("Poprawny login i hasło!")
-                } else {
-                    showToast("Niepoprawny login bądź hasło")
-                }
-            }
+            // for now toast communicate
+            showToast("Logging in...\nEmail: $email\nPassword: $password")
         } else {
-            showToast("Please wprowadz login i haslo")
+            showToast("Please enter both email and password")
         }
     }
 
