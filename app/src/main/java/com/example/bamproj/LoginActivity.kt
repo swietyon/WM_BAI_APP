@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -14,10 +13,8 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.example.bamproj.services.SharedPreferencesManager
 import com.example.bamproj.services.UserService
 import kotlinx.coroutines.launch
-import kotlin.math.log
 
 class LoginActivity : AppCompatActivity() {
 
@@ -28,8 +25,6 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var userService: UserService
     private lateinit var rememberMeCheckbox: CheckBox
     private lateinit var sharedPreferences: SharedPreferences
-    private lateinit var editor: SharedPreferences.Editor
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,9 +35,8 @@ class LoginActivity : AppCompatActivity() {
         loginButton = findViewById(R.id.loginButton)
         signUpButton = findViewById(R.id.signUpButton)
         rememberMeCheckbox = findViewById(R.id.checkBoxRememberMe)
-        userService = UserService((applicationContext as BamApplication).database.userDao()) // Inicjalizacja serwisu
+        userService = UserService((applicationContext as BamApplication).database.userDao())
         sharedPreferences = getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
-        editor = sharedPreferences.edit()
 
         loginButton.setOnClickListener {
             performLogin()
@@ -52,14 +46,14 @@ class LoginActivity : AppCompatActivity() {
             changeToSignUpActivity()
         }
 
-        val rememberedLogin = sharedPreferences.getString("LOGIN", null);
+        val rememberedLogin = sharedPreferences.getString("LOGIN", null)
         if (rememberedLogin != null) {
             showToast("Zalogowano bez logowania!")
+            launchDashboardActivity()
         }
 
         editTextEmail.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN) {
-
                 editTextPassword.requestFocus()
                 return@setOnKeyListener true
             }
@@ -68,11 +62,16 @@ class LoginActivity : AppCompatActivity() {
 
         findViewById<View>(android.R.id.content).setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
-                // hide keyboard
                 hideKeyboard()
             }
             return@setOnTouchListener false
         }
+    }
+
+    private fun launchDashboardActivity() {
+        val intent = Intent(this, DashboardActivity::class.java)
+        startActivity(intent)
+        finish()
     }
 
     private fun changeToSignUpActivity() {
@@ -88,19 +87,25 @@ class LoginActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 val isValid: Boolean = userService.validatePassword(email, password)
                 if (isValid) {
-                    showToast(rememberMeCheckbox.isChecked.toString())
-                    if (rememberMeCheckbox.isChecked) {
-                        editor.putString("LOGIN", email)
-                        editor.putString("PASSWORD", password)
-                        editor.apply()
-                    }
+                    handleRememberMe(email, password)
                     showToast("Poprawny login i hasło!")
+                    launchDashboardActivity()
                 } else {
                     showToast("Niepoprawny login bądź hasło")
                 }
             }
         } else {
-            showToast("Please wprowadz login i haslo")
+            showToast("Proszę, wprowadź login i hasło")
+        }
+    }
+
+    private fun handleRememberMe(email: String, password: String) {
+        if (rememberMeCheckbox.isChecked) {
+            sharedPreferences.edit().apply {
+                putString("LOGIN", email)
+                putString("PASSWORD", password)
+                apply()
+            }
         }
     }
 

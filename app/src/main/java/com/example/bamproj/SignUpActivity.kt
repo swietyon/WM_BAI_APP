@@ -9,12 +9,10 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.bamproj.services.UserService
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class SignUpActivity : AppCompatActivity() {
 
@@ -27,7 +25,6 @@ class SignUpActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_signup)
-
 
         editTextEmail = findViewById(R.id.editTextEmail)
         editTextPassword = findViewById(R.id.editTextPassword)
@@ -45,17 +42,15 @@ class SignUpActivity : AppCompatActivity() {
                 val password = editTextPassword.text.toString()
 
                 if (email.isNotEmpty() && password.isNotEmpty()) {
-                    lifecycleScope.launch {
-                        if (userService.isUserNameExists(email)) {
-                            showToast("Użytkownik o podanej nazwie już istnieje")
+                    if (userService.isUserNameExists(email)) {
+                        showToast("Użytkownik o podanej nazwie już istnieje")
+                    } else {
+                        val success = userService.registerUser(email, password, "", "")
+                        if (success) {
+                            showToast("Użytkownik został zarejestrowany")
+                            performLogin(email, password)
                         } else {
-                            val success = userService.registerUser(email, password, "", "")
-                            if (success) {
-                                showToast("Użytkownik został zarejestrowany")
-                                goToLoginActivity()
-                            } else {
-                                showToast("Wystąpił problem podczas rejestracji użytkownika")
-                            }
+                            showToast("Wystąpił problem podczas rejestracji użytkownika")
                         }
                     }
                 } else {
@@ -66,7 +61,6 @@ class SignUpActivity : AppCompatActivity() {
 
         editTextEmail.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN) {
-
                 editTextPassword.requestFocus()
                 return@setOnKeyListener true
             }
@@ -87,16 +81,11 @@ class SignUpActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    private fun performLogin() {
-        val email = editTextEmail.text.toString()
-        val password = editTextPassword.text.toString()
-
-        if (email.isNotEmpty() && password.isNotEmpty()) {
-            // for now toast communicate
-            showToast("Logging in...\nEmail: $email\nPassword: $password")
-        } else {
-            showToast("Please enter both email and password")
-        }
+    private fun performLogin(email: String, password: String) {
+        // Przeniesienie do DashboardActivity po zalogowaniu
+        val intent = Intent(this, DashboardActivity::class.java)
+        startActivity(intent)
+        finish() // Opcjonalnie możesz zakończyć bieżącą aktywność, aby użytkownik nie mógł wrócić przyciskiem cofania
     }
 
     private fun showToast(message: String) {
