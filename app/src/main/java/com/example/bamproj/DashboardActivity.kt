@@ -21,6 +21,11 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.Date
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.widget.Toast
+import java.security.KeyStore
+import javax.crypto.KeyGenerator
 
 class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
 
@@ -28,8 +33,10 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
     private lateinit var noteList: MutableList<Note>
     private lateinit var userName: String
     private lateinit var noteDao: NoteDao
+    private lateinit var keyStore: KeyStore
+    private val KEY_ALIAS = "NoteKey"
 
-    @RequiresApi(Build.VERSION_CODES.O)
+    @RequiresApi(Build.VERSION_CODES.M)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val intent = intent
@@ -44,8 +51,13 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
         val recyclerView: RecyclerView = findViewById(R.id.recyclerViewNotes)
         noteList = mutableListOf()
 
-        lifecycleScope.launch {
-            loadListByUserName(noteList, noteDao, userName);
+        // Inicjalizacja Android Keystore
+        keyStore = KeyStore.getInstance("AndroidKeyStore")
+        keyStore.load(null)
+
+        // Inicjalizacja klucza w Android Keystore
+        if (!keyStore.containsAlias(KEY_ALIAS)) {
+            generateKey()
         }
 
         noteAdapter = NoteAdapter(noteList, this)
@@ -54,7 +66,7 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
 
         // Przykładowy tekst powitalny
         val textViewWelcome: TextView = findViewById(R.id.textViewWelcome)
-        textViewWelcome.text = "Witaj, ${userName}!"
+        textViewWelcome.text = "Witaj, $userName!"
 
         // Przycisk do wylogowania
         val logoutButton: Button = findViewById(R.id.logoutButton)
@@ -65,8 +77,35 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
         // Przycisk do dodawania notatki
         val addNoteButton: Button = findViewById(R.id.addNoteButton)
         addNoteButton.setOnClickListener {
-            addNote(noteDao, userName)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                addNote(noteDao, userName)
+            }
         }
+
+        // Automatyczne odświeżanie notatek
+        lifecycleScope.launch {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                loadListByUserName(noteList, noteDao, userName)
+            }
+            noteAdapter.notifyDataSetChanged()
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.M)
+    private fun generateKey() {
+        val keyGenerator =
+            KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        val keyGenParameterSpec = KeyGenParameterSpec.Builder(
+            KEY_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setRandomizedEncryptionRequired(false)
+            .build()
+
+        keyGenerator.init(keyGenParameterSpec)
+        keyGenerator.generateKey()
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -96,12 +135,21 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
             // Dodaj notatkę do listy i odśwież RecyclerView
             addNoteToRecyclerView(title, content, LocalDateTime.now())
 
-
             lifecycleScope.launch {
                 insertNote(userName, content, title)
             }
 
+            // Wyświetl informację dla użytkownika
+            showToast("Notatka została dodana!")
+        } else {
+            // Wyświetl informację dla użytkownika o błędnych danych
+            showToast("Wprowadź tytuł i treść notatki.")
         }
+    }
+
+    // Funkcja pomocnicza do wyświetlania Toast
+    private fun showToast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -149,26 +197,32 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
         finish() // Opcjonalnie możesz zakończyć bieżącą aktywność, aby użytkownik nie mógł wrócić przyciskiem cofania
     }
 
-    private fun showNoteDetails(note: Note) {
-        // Navigacja do NoteDetailsActivity
-        // Tutaj możesz otworzyć nową aktywność, aby pokazać szczegóły notatki
-        // Przykładowo:
-        // val intent = Intent(this, NoteDetailsActivity::class.java)
-        // intent.putExtra("NOTE_TITLE", note.title)
-        // intent.putExtra("NOTE_CONTENT", note.content)
-        // startActivity(intent)
+    private fun editNote(note: Note) {
     }
 
-    // Dodana funkcja usuwająca notatkę
     private fun deleteNote(position: Int) {
+        val deletedNote = noteList[position]
+
+        lifecycleScope.launch {
+            deleteNoteFromDatabase(deletedNote)
+        }
+
         noteList.removeAt(position)
         noteAdapter.notifyDataSetChanged()
+
+        showToast("Notatka została usunięta!")
+    }
+
+    private suspend fun deleteNoteFromDatabase(note: Note) {
+        withContext(Dispatchers.IO) {
+            noteDao.deleteNoteByTitleAndContent(note.title, note.content)
+        }
     }
 
     override fun onNoteClick(position: Int) {
         // Obsługa kliknięcia na notatkę
         val clickedNote = noteList[position]
-        showNoteDetails(clickedNote)
+        editNote(clickedNote)
     }
 
     override fun onNoteDelete(position: Int) {

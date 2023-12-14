@@ -48,6 +48,9 @@ interface NoteDao {
     @Insert
     fun insert(note: NoteEntity)
 
+    @Query("DELETE FROM note WHERE title = :title AND content = :content")
+    fun deleteNoteByTitleAndContent(title: String, content: String)
+
     @Query("DELETE FROM note WHERE title = :title")
     fun deleteByTitle(title: String)
 }
