@@ -1,10 +1,30 @@
 package com.example.bamproj
 
 import android.database.Cursor
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.room.*
 import androidx.room.RoomDatabase
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
+class LocalDateTimeConverter {
 
+    @RequiresApi(Build.VERSION_CODES.O)
+    private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    @TypeConverter
+    fun fromLocalDateTime(dateTime: LocalDateTime?): String? {
+        return dateTime?.format(formatter)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    @TypeConverter
+    fun toLocalDateTime(dateTimeString: String?): LocalDateTime? {
+        return dateTimeString?.let { LocalDateTime.parse(it, formatter) }
+    }
+}
 @Dao
 interface UserDao {
     @Query("SELECT * FROM user")
@@ -20,6 +40,18 @@ interface UserDao {
     fun getUserByUsername(userName: String): User?
 }
 
+
+@Dao
+interface NoteDao {
+    @Query("SELECT * FROM note WHERE user_name = :userName")
+    fun getNoteByUsername(userName: String): List<NoteEntity>
+    @Insert
+    fun insert(note: NoteEntity)
+
+    @Query("DELETE FROM note WHERE title = :title")
+    fun deleteByTitle(title: String)
+}
+
 @Entity
 data class User(
     @PrimaryKey(autoGenerate = true) var uid: Int? = null,
@@ -28,8 +60,18 @@ data class User(
     @ColumnInfo(name = "address") var address: String,
     @ColumnInfo(name = "phone_number") var phoneNumber: String
 )
+@Entity(tableName = "note")
+data class NoteEntity(
+    @PrimaryKey(autoGenerate = true) var uid: Int? = null,
+    @ColumnInfo(name = "user_name") var userName: String,
+    @ColumnInfo(name = "content") var content: String,
+    @ColumnInfo(name = "title") var title: String,
+    @ColumnInfo(name = "creation_time") var creationTime: LocalDateTime
+)
 
-@Database(entities = [User::class], version = 2)
+@Database(entities = [User::class, NoteEntity::class], version = 4)
+@TypeConverters(LocalDateTimeConverter::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
+    abstract fun noteDao(): NoteDao
 }

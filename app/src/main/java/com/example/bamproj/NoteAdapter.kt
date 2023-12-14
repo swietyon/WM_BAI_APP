@@ -31,6 +31,7 @@ class NoteAdapter(
 
     inner class NoteViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val titleTextView: TextView = itemView.findViewById(R.id.textViewNoteTitle)
+        private val contentTextView: TextView = itemView.findViewById(R.id.textViewNoteContent)
         private val dateTextView: TextView = itemView.findViewById(R.id.textViewNoteDate)
         private val deleteButton: Button = itemView.findViewById(R.id.buttonDelete)
 
@@ -46,6 +47,7 @@ class NoteAdapter(
 
         fun bind(note: Note) {
             titleTextView.text = note.title
+            contentTextView.text = note.content
             // Formatowanie daty wg potrzeb
             dateTextView.text = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                 .format(note.date)

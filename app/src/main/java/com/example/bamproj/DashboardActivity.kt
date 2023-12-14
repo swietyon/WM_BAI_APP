@@ -3,37 +3,58 @@ package com.example.bamproj
 import NoteAdapter
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.example.bamproj.OnNoteClickListener
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.util.Date
 
 class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
 
     private lateinit var noteAdapter: NoteAdapter
     private lateinit var noteList: MutableList<Note>
+    private lateinit var userName: String
+    private lateinit var noteDao: NoteDao
 
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val intent = intent
+        if (intent.hasExtra("USER_NAME")) {
+            userName = intent.getStringExtra("USER_NAME")!!
+        }
+        noteDao = (applicationContext as BamApplication).database.noteDao()
+
         setContentView(R.layout.activity_dashboard)
 
         // Inicjalizacja RecyclerView
         val recyclerView: RecyclerView = findViewById(R.id.recyclerViewNotes)
         noteList = mutableListOf()
+
+        lifecycleScope.launch {
+            loadListByUserName(noteList, noteDao, userName);
+        }
+
         noteAdapter = NoteAdapter(noteList, this)
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = noteAdapter
 
         // Przykładowy tekst powitalny
         val textViewWelcome: TextView = findViewById(R.id.textViewWelcome)
-        textViewWelcome.text = "Witaj, ${getUserEmail()}!"
+        textViewWelcome.text = "Witaj, ${userName}!"
 
         // Przycisk do wylogowania
         val logoutButton: Button = findViewById(R.id.logoutButton)
@@ -44,11 +65,27 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
         // Przycisk do dodawania notatki
         val addNoteButton: Button = findViewById(R.id.addNoteButton)
         addNoteButton.setOnClickListener {
-            addNote()
+            addNote(noteDao, userName)
         }
     }
 
-    private fun addNote() {
+    @RequiresApi(Build.VERSION_CODES.O)
+    private suspend fun loadListByUserName(noteList: MutableList<Note>, noteDao: NoteDao, userName: String) {
+        return withContext(Dispatchers.IO) {
+            val result = noteDao.getNoteByUsername(userName)
+            for (singleElem in result) {
+                noteList.add(
+                    Note(
+                        title = singleElem.title, content = singleElem.content,
+                        date = Date.from(singleElem.creationTime.toInstant(ZoneOffset.ofHours(1)))
+                    )
+                )
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun addNote(noteDao: NoteDao, userName: String) {
         val titleEditText: EditText = findViewById(R.id.editTextNoteTitle)
         val contentEditText: EditText = findViewById(R.id.editTextNoteContent)
 
@@ -57,16 +94,35 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
 
         if (title.isNotEmpty() && content.isNotEmpty()) {
             // Dodaj notatkę do listy i odśwież RecyclerView
-            addNoteToRecyclerView(title, content)
-            // Opcjonalnie: Zapisz notatkę w bazie danych
+            addNoteToRecyclerView(title, content, LocalDateTime.now())
+
+
+            lifecycleScope.launch {
+                insertNote(userName, content, title)
+            }
+
         }
     }
 
-    private fun addNoteToRecyclerView(title: String, content: String) {
+    @RequiresApi(Build.VERSION_CODES.O)
+    private suspend fun insertNote(userName: String, content: String, title: String) {
+        return withContext(Dispatchers.IO) {
+            val newNote = NoteEntity(
+                userName = userName,
+                content = content,
+                creationTime = LocalDateTime.now(),
+                title = title
+            )
+            noteDao.insert(newNote)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun addNoteToRecyclerView(title: String, content: String, now: LocalDateTime) {
         val note = Note(
             title,
             content,
-            Date()
+            Date.from(now.toInstant(ZoneOffset.ofHours(1)))
         )
         noteList.add(note)
         noteAdapter.notifyDataSetChanged()

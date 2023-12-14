@@ -83,6 +83,7 @@ class SignUpActivity : AppCompatActivity() {
     private fun performLogin(email: String, password: String) {
         // Przeniesienie do DashboardActivity po zalogowaniu
         val intent = Intent(this, DashboardActivity::class.java)
+        intent.putExtra("USER_NAME", email)
         startActivity(intent)
         finish() // Opcjonalnie możesz zakończyć bieżącą aktywność, aby użytkownik nie mógł wrócić przyciskiem cofania
     }

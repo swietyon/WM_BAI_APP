@@ -49,7 +49,7 @@ class LoginActivity : AppCompatActivity() {
         val rememberedLogin = sharedPreferences.getString("LOGIN", null)
         if (rememberedLogin != null) {
             showToast("Zalogowano bez logowania!")
-            launchDashboardActivity()
+            launchDashboardActivity(rememberedLogin)
         }
 
         editTextEmail.setOnKeyListener { _, keyCode, event ->
@@ -68,8 +68,9 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun launchDashboardActivity() {
+    private fun launchDashboardActivity(email: String) {
         val intent = Intent(this, DashboardActivity::class.java)
+        intent.putExtra("USER_NAME", email)
         startActivity(intent)
         finish()
     }
@@ -89,7 +90,7 @@ class LoginActivity : AppCompatActivity() {
                 if (isValid) {
                     handleRememberMe(email, password)
                     showToast("Poprawny login i hasło!")
-                    launchDashboardActivity()
+                    launchDashboardActivity(email)
                 } else {
                     showToast("Niepoprawny login bądź hasło")
                 }
