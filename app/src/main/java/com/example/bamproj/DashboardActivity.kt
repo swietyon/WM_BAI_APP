@@ -1,6 +1,7 @@
 package com.example.bamproj
 
 import NoteAdapter
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -23,11 +24,15 @@ import java.time.ZoneOffset
 import java.util.Date
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.util.Base64
+import android.util.Log
 import android.widget.Toast
+import java.nio.charset.StandardCharsets.UTF_8
 import java.security.KeyStore
-import java.util.stream.Collectors
+import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
-import kotlin.streams.toList
+import javax.crypto.SecretKey
+import javax.crypto.spec.IvParameterSpec
 
 class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
 
@@ -40,9 +45,10 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
     private lateinit var contentEditText: EditText
     private lateinit var addNoteButton: Button
     private lateinit var editedNote: Note
-    private val KEY_ALIAS = "NoteKey"
+    private lateinit var mainCipher: Cipher
     private var editedNoteId: Long? = null;
     private var editedNotePosition: Int? = null;
+
 
     @RequiresApi(Build.VERSION_CODES.M)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,15 +64,6 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
         // Inicjalizacja RecyclerView
         val recyclerView: RecyclerView = findViewById(R.id.recyclerViewNotes)
         noteList = mutableListOf()
-
-        // Inicjalizacja Android Keystore
-        keyStore = KeyStore.getInstance("AndroidKeyStore")
-        keyStore.load(null)
-
-        // Inicjalizacja klucza w Android Keystore
-        if (!keyStore.containsAlias(KEY_ALIAS)) {
-            generateKey()
-        }
 
         noteAdapter = NoteAdapter(noteList, this)
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -99,32 +96,17 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
-    private fun generateKey() {
-        val keyGenerator =
-            KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
-        val keyGenParameterSpec = KeyGenParameterSpec.Builder(
-            KEY_ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setRandomizedEncryptionRequired(false)
-            .build()
-
-        keyGenerator.init(keyGenParameterSpec)
-        keyGenerator.generateKey()
-    }
-
     @RequiresApi(Build.VERSION_CODES.O)
     private suspend fun loadListByUserName(noteList: MutableList<Note>, noteDao: NoteDao, userName: String) {
         return withContext(Dispatchers.IO) {
             val result = noteDao.getNoteByUsername(userName)
             for (singleElem in result) {
+                Log.d(TAG, "DATA: Title: " + singleElem.title +  " Content :" + singleElem.content);
                 noteList.add(
                     Note(
                         uid = singleElem.uid!!,
-                        title = singleElem.title, content = singleElem.content,
+                        title = singleElem.title,
+                        content = decryptString(singleElem.content),
                         date = Date.from(singleElem.creationTime.toInstant(ZoneOffset.ofHours(1)))
                     )
                 )
@@ -157,8 +139,9 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
     private suspend fun processEditingNote(title: String, content: String, noteDao: NoteDao, userName: String) {
         lifecycleScope.launch {
             var note: NoteEntity = getNote(editedNoteId!!)
+
             note.title = title
-            note.content = content
+            note.content = encryptString(content)
             updateNote(note);
 
             editNoteInRecyclerView(editedNoteId!!, title, content, LocalDateTime.now())
@@ -171,6 +154,7 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
             editedNotePosition = null
         }
     }
+
     private suspend fun getNote(editedNoteId: Long): NoteEntity {
         return withContext(Dispatchers.IO) {
             return@withContext noteDao.getByUid(editedNoteId);
@@ -200,7 +184,7 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
         return withContext(Dispatchers.IO) {
             val newNote = NoteEntity(
                 userName = userName,
-                content = content,
+                content = encryptString(content),
                 creationTime = LocalDateTime.now(),
                 title = title
             )
@@ -294,5 +278,56 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
             imm.hideSoftInputFromWindow(view.windowToken, 0)
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    private fun initializeCipher() {
+    }
+
+    private fun stringToByteArray(text: String): ByteArray {
+        return text.let { Base64.decode(it, Base64.DEFAULT) }
+    }
+
+    private fun byteArrayToString(byteArray: ByteArray): String {
+        return byteArray.let { Base64.encodeToString(it, Base64.DEFAULT) }
+    }
+
+    private fun getKey(): SecretKey {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore")
+        keyStore.load(null)
+        val KEY_ALIAS = "KEYALIAS"
+        if (!keyStore.containsAlias(KEY_ALIAS)) {
+            val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+            val keyGeneratorSpec = KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_CBC)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_PKCS7)
+                .setUserAuthenticationRequired(false)
+                .build()
+            keyGenerator.init(keyGeneratorSpec)
+            keyGenerator.generateKey()
+        } else {
+            Log.d(TAG, "Posiada");
+        }
+
+        val secreteKeyEntry: KeyStore.SecretKeyEntry = keyStore.getEntry(KEY_ALIAS, null) as KeyStore.SecretKeyEntry
+        return secreteKeyEntry.secretKey
+    }
+
+    private fun encryptString(data: String): String {
+        mainCipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
+        mainCipher.init(Cipher.ENCRYPT_MODE, getKey())
+        val ivString = byteArrayToString(mainCipher.iv)
+        return ivString + ":::" + byteArrayToString(mainCipher.doFinal(data.toByteArray(Charsets.UTF_8)));
+    }
+
+    private fun decryptString(encData: String): String {
+        val ivStringWithEncryptedData = encData.split(":::")
+        val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
+        val keySpec = IvParameterSpec(stringToByteArray(ivStringWithEncryptedData.get(0)))
+        cipher.init(Cipher.DECRYPT_MODE, getKey(), keySpec)
+        return cipher.doFinal(stringToByteArray(ivStringWithEncryptedData.get(1))).toString(UTF_8)
+
     }
 }

@@ -78,7 +78,7 @@ data class NoteEntity(
     @ColumnInfo(name = "creation_time") var creationTime: LocalDateTime
 )
 
-@Database(entities = [User::class, NoteEntity::class], version = 8)
+@Database(entities = [User::class, NoteEntity::class], version = 15)
 @TypeConverters(LocalDateTimeConverter::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
