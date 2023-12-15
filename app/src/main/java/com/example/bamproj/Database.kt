@@ -45,8 +45,14 @@ interface UserDao {
 interface NoteDao {
     @Query("SELECT * FROM note WHERE user_name = :userName")
     fun getNoteByUsername(userName: String): List<NoteEntity>
-    @Insert
-    fun insert(note: NoteEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insert(note: NoteEntity): Long
+
+    @Query("SELECT * FROM note WHERE uid = :uid")
+    fun getByUid(uid: Long): NoteEntity
+
+    @Update
+    fun update(note: NoteEntity)
 
     @Query("DELETE FROM note WHERE title = :title AND content = :content")
     fun deleteNoteByTitleAndContent(title: String, content: String)
@@ -65,14 +71,14 @@ data class User(
 )
 @Entity(tableName = "note")
 data class NoteEntity(
-    @PrimaryKey(autoGenerate = true) var uid: Int? = null,
+    @PrimaryKey(autoGenerate = true) var uid: Long? = null,
     @ColumnInfo(name = "user_name") var userName: String,
     @ColumnInfo(name = "content") var content: String,
     @ColumnInfo(name = "title") var title: String,
     @ColumnInfo(name = "creation_time") var creationTime: LocalDateTime
 )
 
-@Database(entities = [User::class, NoteEntity::class], version = 4)
+@Database(entities = [User::class, NoteEntity::class], version = 8)
 @TypeConverters(LocalDateTimeConverter::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao

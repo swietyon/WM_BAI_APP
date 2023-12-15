@@ -25,7 +25,9 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.widget.Toast
 import java.security.KeyStore
+import java.util.stream.Collectors
 import javax.crypto.KeyGenerator
+import kotlin.streams.toList
 
 class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
 
@@ -34,7 +36,13 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
     private lateinit var userName: String
     private lateinit var noteDao: NoteDao
     private lateinit var keyStore: KeyStore
+    private lateinit var titleEditText: EditText
+    private lateinit var contentEditText: EditText
+    private lateinit var addNoteButton: Button
+    private lateinit var editedNote: Note
     private val KEY_ALIAS = "NoteKey"
+    private var editedNoteId: Long? = null;
+    private var editedNotePosition: Int? = null;
 
     @RequiresApi(Build.VERSION_CODES.M)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,21 +72,21 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = noteAdapter
 
-        // Przykładowy tekst powitalny
         val textViewWelcome: TextView = findViewById(R.id.textViewWelcome)
         textViewWelcome.text = "Witaj, $userName!"
 
-        // Przycisk do wylogowania
         val logoutButton: Button = findViewById(R.id.logoutButton)
         logoutButton.setOnClickListener {
             performLogout()
         }
 
-        // Przycisk do dodawania notatki
-        val addNoteButton: Button = findViewById(R.id.addNoteButton)
+        titleEditText = findViewById(R.id.editTextNoteTitle)
+        contentEditText = findViewById(R.id.editTextNoteContent)
+        addNoteButton = findViewById(R.id.addNoteButton)
+
         addNoteButton.setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                addNote(noteDao, userName)
+                addOrEditNote(noteDao, userName)
             }
         }
 
@@ -115,6 +123,7 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
             for (singleElem in result) {
                 noteList.add(
                     Note(
+                        uid = singleElem.uid!!,
                         title = singleElem.title, content = singleElem.content,
                         date = Date.from(singleElem.creationTime.toInstant(ZoneOffset.ofHours(1)))
                     )
@@ -124,26 +133,60 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun addNote(noteDao: NoteDao, userName: String) {
-        val titleEditText: EditText = findViewById(R.id.editTextNoteTitle)
-        val contentEditText: EditText = findViewById(R.id.editTextNoteContent)
-
+    private fun addOrEditNote(noteDao: NoteDao, userName: String) {
         val title = titleEditText.text.toString()
         val content = contentEditText.text.toString()
 
         if (title.isNotEmpty() && content.isNotEmpty()) {
-            // Dodaj notatkę do listy i odśwież RecyclerView
-            addNoteToRecyclerView(title, content, LocalDateTime.now())
-
             lifecycleScope.launch {
-                insertNote(userName, content, title)
+                if (editedNoteId == null) {
+                    processInsertingNewNote(title, content, noteDao, userName);
+                    showToast("Notatka została dodana!")
+                } else {
+                    processEditingNote(title, content, noteDao, userName);
+                    showToast("Notatka została zedytowana!")
+                }
+                noteAdapter.notifyDataSetChanged()
             }
-
-            // Wyświetl informację dla użytkownika
-            showToast("Notatka została dodana!")
         } else {
-            // Wyświetl informację dla użytkownika o błędnych danych
             showToast("Wprowadź tytuł i treść notatki.")
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private suspend fun processEditingNote(title: String, content: String, noteDao: NoteDao, userName: String) {
+        lifecycleScope.launch {
+            var note: NoteEntity = getNote(editedNoteId!!)
+            note.title = title
+            note.content = content
+            updateNote(note);
+
+            editNoteInRecyclerView(editedNoteId!!, title, content, LocalDateTime.now())
+            noteAdapter.notifyDataSetChanged()
+
+            titleEditText.setText("")
+            contentEditText.setText("")
+            addNoteButton.setText("Dodaj notatkę")
+            editedNoteId = null
+            editedNotePosition = null
+        }
+    }
+    private suspend fun getNote(editedNoteId: Long): NoteEntity {
+        return withContext(Dispatchers.IO) {
+            return@withContext noteDao.getByUid(editedNoteId);
+        }
+    }
+
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private suspend fun processInsertingNewNote(title: String, content: String, noteDao: NoteDao, userName: String) {
+        lifecycleScope.launch {
+            val createdUid = insertNote(userName, content, title)
+            addNoteToRecyclerView(createdUid, title, content, LocalDateTime.now())
+            noteAdapter.notifyDataSetChanged()
+
+            titleEditText.setText("")
+            contentEditText.setText("")
         }
     }
 
@@ -153,7 +196,7 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private suspend fun insertNote(userName: String, content: String, title: String) {
+    private suspend fun insertNote(userName: String, content: String, title: String): Long {
         return withContext(Dispatchers.IO) {
             val newNote = NoteEntity(
                 userName = userName,
@@ -161,43 +204,57 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
                 creationTime = LocalDateTime.now(),
                 title = title
             )
-            noteDao.insert(newNote)
+            return@withContext noteDao.insert(newNote)
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun addNoteToRecyclerView(title: String, content: String, now: LocalDateTime) {
+    private suspend fun updateNote(note: NoteEntity) {
+        return withContext(Dispatchers.IO) {
+            noteDao.update(note)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun addNoteToRecyclerView(createdUid: Long, title: String, content: String, now: LocalDateTime) {
         val note = Note(
+            createdUid,
             title,
             content,
             Date.from(now.toInstant(ZoneOffset.ofHours(1)))
         )
         noteList.add(note)
-        noteAdapter.notifyDataSetChanged()
     }
 
-    private fun getUserEmail(): String {
-        // Pobierz e-mail użytkownika z zapisanych danych lub innego miejsca
-        // Tutaj zakładam, że e-mail został zapisany w SharedPreferences pod kluczem "LOGIN"
-        val sharedPreferences = getSharedPreferences("MySharedPreferences", MODE_PRIVATE)
-        return sharedPreferences.getString("LOGIN", "") ?: ""
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun editNoteInRecyclerView(createdUid: Long, title: String, content: String, now: LocalDateTime) {
+        val note = Note(
+            createdUid,
+            title,
+            content,
+            Date.from(now.toInstant(ZoneOffset.ofHours(1)))
+        )
+        noteList.set(editedNotePosition!!, note);
     }
 
     private fun performLogout() {
-        // Usuń zapisane dane (możesz doprecyzować, co chcesz usunąć)
         val sharedPreferences = getSharedPreferences("MySharedPreferences", MODE_PRIVATE)
         val editor = sharedPreferences.edit()
         editor.remove("LOGIN")
         editor.remove("PASSWORD")
         editor.apply()
 
-        // Przejdź z powrotem do ekranu logowania
         val intent = Intent(this, LoginActivity::class.java)
         startActivity(intent)
-        finish() // Opcjonalnie możesz zakończyć bieżącą aktywność, aby użytkownik nie mógł wrócić przyciskiem cofania
+        finish()
     }
 
-    private fun editNote(note: Note) {
+    private fun editNote(note: Note, position: Int) {
+        addNoteButton.text = "Edytuj notatkę"
+        titleEditText.setText(note.title)
+        contentEditText.setText(note.content)
+        editedNoteId = note.uid;
+        editedNotePosition = position;
     }
 
     private fun deleteNote(position: Int) {
@@ -222,7 +279,7 @@ class DashboardActivity : AppCompatActivity(), OnNoteClickListener {
     override fun onNoteClick(position: Int) {
         // Obsługa kliknięcia na notatkę
         val clickedNote = noteList[position]
-        editNote(clickedNote)
+        editNote(clickedNote, position)
     }
 
     override fun onNoteDelete(position: Int) {
